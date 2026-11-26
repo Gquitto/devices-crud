@@ -1,0 +1,300 @@
+openapi: 3.1.0
+info:
+  title: Devices API
+  version: 0.1.0
+  description: |
+    REST API to manage devices.
+
+    **Status: draft.** This contract was drafted from the project specification.
+    Tests are the source of truth; if they disagree with this file, update this file.
+
+    Domain rules:
+    - `creationTime` is set by the server and can never be updated.
+    - `name` and `brand` cannot be updated while the device is `in-use`.
+    - Devices that are `in-use` cannot be deleted.
+    - An omitted `state` on create defaults to `available`.
+    - `name` and `brand` must not be null or blank (whitespace-only counts as blank).
+    - The in-use rule is checked against the device's **current** state. Changing only
+      `state`, or sending unchanged `name`/`brand` values, is allowed. Freeing a device
+      and renaming it in the same request is rejected with `409`.
+    - A failed update leaves the device unchanged.
+    - Request bodies reject unknown fields, so sending `id` or `creationTime` is a `400`.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: devices
+  - name: health
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Liveness check
+      operationId: health
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /devices:
+    post:
+      tags: [devices]
+      summary: Create a new device
+      operationId: createDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeviceRequest"
+      responses:
+        "201":
+          description: Device created
+          headers:
+            Location:
+              description: URL of the created device
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [devices]
+      summary: Fetch devices
+      description: |
+        Returns all devices. Filter by `brand` and/or `state` using query parameters.
+        When both are given, devices must match both.
+      operationId: listDevices
+      parameters:
+        - name: brand
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/State"
+      responses:
+        "200":
+          description: List of devices (empty array when none match)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Device"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /devices/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    get:
+      tags: [devices]
+      summary: Fetch a single device
+      operationId: getDevice
+      responses:
+        "200":
+          description: The device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [devices]
+      summary: Fully update a device
+      description: Replaces `name`, `brand` and `state`. All fields are required.
+      operationId: updateDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDeviceRequest"
+      responses:
+        "200":
+          description: Updated device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    patch:
+      tags: [devices]
+      summary: Partially update a device
+      description: Updates only the fields present in the body.
+      operationId: patchDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchDeviceRequest"
+      responses:
+        "200":
+          description: Updated device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [devices]
+      summary: Delete a single device
+      operationId: deleteDevice
+      responses:
+        "204":
+          description: Device deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+components:
+  parameters:
+    DeviceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    State:
+      type: string
+      enum: [available, in-use, inactive]
+
+    Device:
+      type: object
+      required: [id, name, brand, state, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          example: iPhone 15
+        brand:
+          type: string
+          example: Apple
+        state:
+          $ref: "#/components/schemas/State"
+        creationTime:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateDeviceRequest:
+      type: object
+      required: [name, brand]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: Must not be null or blank (whitespace-only is rejected).
+        brand:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: Must not be null or blank (whitespace-only is rejected).
+        state:
+          $ref: "#/components/schemas/State"
+          description: Defaults to `available` when omitted.
+
+    UpdateDeviceRequest:
+      type: object
+      required: [name, brand, state]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: Must not be null or blank (whitespace-only is rejected).
+        brand:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: Must not be null or blank (whitespace-only is rejected).
+        state:
+          $ref: "#/components/schemas/State"
+
+    PatchDeviceRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: Must not be null or blank (whitespace-only is rejected).
+        brand:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: Must not be null or blank (whitespace-only is rejected).
+        state:
+          $ref: "#/components/schemas/State"
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: device not found
+
+  responses:
+    BadRequest:
+      description: Invalid input (malformed JSON, missing or invalid fields, invalid id)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Device not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: |
+        Domain rule violation, e.g. updating name/brand of an in-use device
+        or deleting an in-use device.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

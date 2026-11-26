@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    image: devices-crud:latest
+    container_name: devices-api
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      DB_PATH: /data/devices.db
+      GIN_MODE: release
+    volumes:
+      - devices-data:/data
+    restart: unless-stopped
+
+volumes:
+  devices-data:

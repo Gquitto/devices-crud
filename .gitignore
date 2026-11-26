@@ -1,0 +1,26 @@
+# Binaries
+bin/
+*.exe
+*.test
+
+# Coverage
+coverage.*
+*.coverprofile
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Environment
+.env
+.env.*
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Claude Code local (personal) settings
+.claude/settings.local.json

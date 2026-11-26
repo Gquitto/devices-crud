@@ -1,0 +1,14 @@
+.git
+.gitignore
+.claude
+.vscode
+.idea
+bin
+data
+*.db
+*.db-*
+coverage.*
+docker-compose.yml
+Dockerfile
+README.md
+CLAUDE.md
