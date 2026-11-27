@@ -73,6 +73,19 @@ func New(name, brand string, state State) (*Device, error) {
 	}, nil
 }
 
+// Restore rebuilds a device from persisted data. It is meant for repository
+// implementations only: values are trusted as stored and not validated, and
+// no new ID or creation time is generated.
+func Restore(id uuid.UUID, name, brand string, state State, creationTime time.Time) *Device {
+	return &Device{
+		ID:           id,
+		Name:         name,
+		Brand:        brand,
+		State:        state,
+		creationTime: creationTime,
+	}
+}
+
 // CreationTime returns when the device was created.
 func (d *Device) CreationTime() time.Time {
 	return d.creationTime
