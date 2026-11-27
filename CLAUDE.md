@@ -9,6 +9,7 @@ This project is developed **test-first, with a strict split of ownership**:
 - **The user owns all tests.** Every `*_test.go` file and everything under any `testdata/` directory is written by the user.
 - **The agent must never create, edit, rename or delete test files or test fixtures**, not even to fix a typo, add a helper, or "make it compile". A `PreToolUse` hook in `.claude/settings.json` enforces this and will block such attempts.
 - **The agent writes production code only** to make the user's tests pass.
+- **Test doubles are production code owned by the agent.** `internal/device/devicetest` (`FakeRepo`) is a regular package the user's tests import. The agent keeps it a faithful, logic-free `device.Repository` and updates it when the interface changes, but **never changes it to make a test pass**. If a test seems to need different fake behavior, stop and ask.
 
 ### Iteration loop
 
@@ -30,16 +31,30 @@ Explain the problem and wait. Never work around a test by changing it, skipping 
 
 Device: `id`, `name`, `brand`, `state` (`available` | `in-use` | `inactive`), `creationTime`.
 
-Operations: create; full (PUT) and partial (PATCH) update; fetch one; fetch all; fetch by brand; fetch by state; delete one.
+Operations: create; full (PUT) and partial (PATCH) update; fetch one; fetch all; fetch filtered by name, brand and/or state; delete one.
 
 Rules:
 - `creationTime` cannot be updated.
 - `name` and `brand` cannot be updated while the device is `in-use`.
 - `in-use` devices cannot be deleted.
-- An empty `state` on create defaults to `available`.
+- An empty `state` defaults to `available`, on create and on update. Exception: updating an `in-use` device with an empty state is invalid (`ErrInvalidState`), so a device is never freed implicitly.
 - `name` and `brand` must not be null or blank (whitespace-only counts as blank), on create and on update.
 - The in-use rule is evaluated against the device's **current** state, before the update is applied. Changing only `state`, or sending unchanged `name`/`brand` values, is allowed. Freeing a device and renaming it in the same request is rejected.
 - A failed update leaves the device unchanged.
+- A partial update (PATCH) with no fields is an error **in the service**, not only in the HTTP layer, so internal callers can't bypass it. Omitted PATCH fields keep their current value (no `available` default).
+- List filters: `name` and `brand` are **case-insensitive partial** matches (`app` finds `Apple`); `state` is an exact match and an unknown value is `ErrInvalidState`. Filters combine with AND; no filter returns all devices.
+
+Domain API (`internal/device`):
+- Entity: `New(name, brand, state)`, `(*Device).Update(name, brand, state)`, `(*Device).Delete()` (checks the rule only; removal is the repository's job), `(*Device).CreationTime()`.
+- Service: `NewService(repo)`, then `Create(ctx, name, brand, state)`, `Get(ctx, id)`, `Filter(ctx, name, brand, state)`, `Update(ctx, id, name, brand, state)`, `Patch(ctx, id, Patch)`, `Delete(ctx, id)`. `Patch` is a struct of pointers (`Name`, `Brand *string`; `State *State`): `nil` means omitted, a pointer to `""` is a blank value and fails validation. PUT and PATCH share one update path, so the rules live only in `Device.Update`.
+- Repository: `Repository` interface (`Create`, `Get`, `List(ctx, Filter)`, `Update`, `Delete`) and the `Filter` struct. Implementations return `ErrNotFound` for unknown ids and enforce no domain rules.
+- Errors: `ErrInvalidName`, `ErrInvalidBrand`, `ErrInvalidState`, `ErrInUseUpdate`, `ErrInUseDelete`, `ErrNotFound`, `ErrInvalidPatch`.
+
+### Test layers
+
+- `internal/device/device_test.go`: domain rules on the entity.
+- `internal/device/service_test.go`: orchestration (persist on success, nothing persisted on failure, `ErrNotFound`), using `devicetest.FakeRepo`. The fake ignores `Filter`, so filtering is not tested here.
+- HTTP end-to-end tests (`internal/transport/http`): `httptest` against a real SQLite file in `t.TempDir()`; they cover SQL, filters, status codes and JSON. Fixtures live in user-owned `testdata/`.
 
 The HTTP contract draft lives in [api/openapi.yaml](api/openapi.yaml). Tests take precedence over it. When production code changes the contract to satisfy tests, update the YAML too.
 
@@ -48,6 +63,7 @@ The HTTP contract draft lives in [api/openapi.yaml](api/openapi.yaml). Tests tak
 ```
 cmd/api/                  entrypoint: config from env, wiring, HTTP server
 internal/device/          domain: entity, state, rules, errors, service, repository interface
+  devicetest/             test doubles (FakeRepo) for the user's service tests; agent-owned
 internal/storage/sqlite/  repository implementation on SQLite (modernc.org/sqlite, no CGO)
   migrations/             SQL migrations, embedded with go:embed
 internal/transport/http/  gin handlers, routing, DTOs, domain error → HTTP status mapping

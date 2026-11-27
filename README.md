@@ -2,7 +2,7 @@
 
 A REST API in Go for managing devices: create, update (fully or partially), fetch, filter by brand or state, and delete. Data is persisted in SQLite and the service ships as a Docker container.
 
-> **Status:** project skeleton. The domain, persistence and HTTP layers are built test-first. See [Development workflow](#development-workflow).
+> **Status:** work in progress. The domain and service layers are done; persistence and HTTP are next. Every layer is built test-first. See [Development workflow](#development-workflow).
 
 ## Domain
 
@@ -22,6 +22,7 @@ A REST API in Go for managing devices: create, update (fully or partially), fetc
 - Fetch all devices.
 - Fetch devices by brand.
 - Fetch devices by state.
+- Fetch devices by name (partial, case-insensitive). Filters can be combined.
 - Delete a single device.
 
 ### Domain rules
@@ -29,10 +30,12 @@ A REST API in Go for managing devices: create, update (fully or partially), fetc
 - `creationTime` cannot be updated.
 - `name` and `brand` cannot be updated while the device is `in-use`.
 - `in-use` devices cannot be deleted.
-- An empty `state` on create defaults to `available`.
+- An empty `state` defaults to `available`, on create and on full update. Exception: a full update of an `in-use` device with no state is rejected, so a device is never freed implicitly.
 - `name` and `brand` must not be null or blank (whitespace-only counts as blank).
 - The in-use rule is checked against the device's **current** state. Changing only `state`, or sending unchanged `name`/`brand` values, is allowed. Freeing a device and renaming it in the same request is rejected.
 - A failed update leaves the device unchanged.
+- A partial update with no fields is rejected, both by the API and by the service.
+- List filters: `name` and `brand` match partially and ignore case (`?brand=app` finds `Apple`); `state` must match exactly. Filters combine with AND.
 
 ## Tech stack
 
@@ -49,6 +52,7 @@ A REST API in Go for managing devices: create, update (fully or partially), fetc
 ├── cmd/api/                   # Application entrypoint
 ├── internal/
 │   ├── device/                # Domain: entity, rules, service, repository interface
+│   │   └── devicetest/        # In-memory fake repository for service tests
 │   ├── storage/sqlite/        # SQLite repository + embedded migrations
 │   └── transport/http/        # gin handlers, routing, DTOs, error mapping
 ├── Dockerfile
@@ -107,7 +111,7 @@ Endpoint summary:
 |---|---|---|
 | `GET` | `/health` | Liveness check |
 | `POST` | `/devices` | Create a device |
-| `GET` | `/devices` | List devices (optional `?brand=` and `?state=` filters) |
+| `GET` | `/devices` | List devices (optional `?name=`, `?brand=` and `?state=` filters) |
 | `GET` | `/devices/{id}` | Fetch one device |
 | `PUT` | `/devices/{id}` | Fully update a device |
 | `PATCH` | `/devices/{id}` | Partially update a device |
@@ -123,11 +127,21 @@ make cover         # coverage summary
 make cover-html    # coverage report in the browser
 ```
 
+Tests are split into three layers:
+
+| Layer | Where | What it checks |
+|---|---|---|
+| Domain | `internal/device/device_test.go` | Entity rules: validation, state defaults, in-use restrictions |
+| Service | `internal/device/service_test.go` | Orchestration: what gets persisted, `not found` handling, empty `PATCH`. Uses the in-memory fake from `internal/device/devicetest` |
+| End-to-end | `internal/transport/http` | HTTP handlers against a real SQLite database in a temp dir: status codes, JSON, filters |
+
+The fake repository ignores list filters on purpose. Filtering happens in SQL, so the end-to-end tests cover it.
+
 ## Development workflow
 
 This project uses a strict test-first split:
 
 1. **A human writes the tests** (`*_test.go`, `testdata/`) to describe the expected behavior.
-2. **An AI coding agent writes the production code** to make those tests pass, iterating on `make test` output. It never modifies tests.
+2. **An AI coding agent writes the production code** to make those tests pass, iterating on `make test` output. It never modifies tests. Test doubles in `devicetest` count as production code: the agent maintains them, but never changes them to make a test pass.
 
 The rules for the agent are in [`CLAUDE.md`](CLAUDE.md). They are enforced by a Claude Code hook ([`.claude/hooks/protect-tests.py`](.claude/hooks/protect-tests.py)) that blocks any agent edit to test files.
