@@ -5,19 +5,24 @@ info:
   description: |
     REST API to manage devices.
 
-    **Status: draft.** This contract was drafted from the project specification.
+    This contract matches the implementation and is checked by the HTTP tests.
     Tests are the source of truth; if they disagree with this file, update this file.
 
     Domain rules:
     - `creationTime` is set by the server and can never be updated.
     - `name` and `brand` cannot be updated while the device is `in-use`.
     - Devices that are `in-use` cannot be deleted.
-    - An omitted `state` on create defaults to `available`.
+    - An omitted `state` defaults to `available` on create (`POST`) and full update (`PUT`).
+      Exception: a `PUT` without `state` on an `in-use` device is rejected with `400`,
+      so a device is never freed implicitly. On `PATCH`, omitted fields keep their value.
     - `name` and `brand` must not be null or blank (whitespace-only counts as blank).
     - The in-use rule is checked against the device's **current** state. Changing only
       `state`, or sending unchanged `name`/`brand` values, is allowed. Freeing a device
       and renaming it in the same request is rejected with `409`.
     - A failed update leaves the device unchanged.
+    - A `PATCH` with no fields is rejected with `400` (also enforced by the service).
+    - List filters: `name` and `brand` are case-insensitive partial matches; `state` is exact.
+      Filters combine with AND.
     - Request bodies reject unknown fields, so sending `id` or `creationTime` is a `400`.
 servers:
   - url: http://localhost:8080
@@ -72,18 +77,26 @@ paths:
       tags: [devices]
       summary: Fetch devices
       description: |
-        Returns all devices. Filter by `brand` and/or `state` using query parameters.
-        When both are given, devices must match both.
+        Returns all devices. Filter by `name`, `brand` and/or `state` using query parameters.
+        When several are given, devices must match all of them.
       operationId: listDevices
       parameters:
+        - name: name
+          in: query
+          required: false
+          description: Case-insensitive partial match (`iphone` finds `iPhone 15`).
+          schema:
+            type: string
         - name: brand
           in: query
           required: false
+          description: Case-insensitive partial match (`app` finds `Apple`).
           schema:
             type: string
         - name: state
           in: query
           required: false
+          description: Exact match. An unknown value is a `400`.
           schema:
             $ref: "#/components/schemas/State"
       responses:
@@ -119,7 +132,9 @@ paths:
     put:
       tags: [devices]
       summary: Fully update a device
-      description: Replaces `name`, `brand` and `state`. All fields are required.
+      description: |
+        Replaces `name`, `brand` and `state`. `name` and `brand` are required.
+        An omitted `state` defaults to `available`, except for an `in-use` device (`400`).
       operationId: updateDevice
       requestBody:
         required: true
@@ -235,7 +250,7 @@ components:
 
     UpdateDeviceRequest:
       type: object
-      required: [name, brand, state]
+      required: [name, brand]
       additionalProperties: false
       properties:
         name:
@@ -250,6 +265,9 @@ components:
           description: Must not be null or blank (whitespace-only is rejected).
         state:
           $ref: "#/components/schemas/State"
+          description: |
+            Defaults to `available` when omitted. Omitting it for an `in-use`
+            device is rejected with `400`.
 
     PatchDeviceRequest:
       type: object

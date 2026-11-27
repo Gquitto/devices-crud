@@ -2,7 +2,7 @@
 
 A REST API in Go for managing devices: create, update (fully or partially), fetch, filter by brand or state, and delete. Data is persisted in SQLite and the service ships as a Docker container.
 
-> **Status:** project skeleton. The domain, persistence and HTTP layers are built test-first. See [Development workflow](#development-workflow).
+> **Status:** all operations are implemented and covered by tests (domain, service, SQLite repository and HTTP). Every layer was built test-first. See [Development workflow](#development-workflow).
 
 ## Domain
 
@@ -22,6 +22,7 @@ A REST API in Go for managing devices: create, update (fully or partially), fetc
 - Fetch all devices.
 - Fetch devices by brand.
 - Fetch devices by state.
+- Fetch devices by name (partial, case-insensitive). Filters can be combined.
 - Delete a single device.
 
 ### Domain rules
@@ -29,10 +30,12 @@ A REST API in Go for managing devices: create, update (fully or partially), fetc
 - `creationTime` cannot be updated.
 - `name` and `brand` cannot be updated while the device is `in-use`.
 - `in-use` devices cannot be deleted.
-- An empty `state` on create defaults to `available`.
+- An empty `state` defaults to `available`, on create and on full update. Exception: a full update of an `in-use` device with no state is rejected, so a device is never freed implicitly.
 - `name` and `brand` must not be null or blank (whitespace-only counts as blank).
 - The in-use rule is checked against the device's **current** state. Changing only `state`, or sending unchanged `name`/`brand` values, is allowed. Freeing a device and renaming it in the same request is rejected.
 - A failed update leaves the device unchanged.
+- A partial update with no fields is rejected, both by the API and by the service.
+- List filters: `name` and `brand` match partially and ignore case (`?brand=app` finds `Apple`); `state` must match exactly. Filters combine with AND.
 
 ## Tech stack
 
@@ -45,12 +48,16 @@ A REST API in Go for managing devices: create, update (fully or partially), fetc
 
 ```
 .
-├── api/openapi.yaml           # API documentation (OpenAPI 3.1)
+├── api/
+│   ├── openapi.yaml           # API documentation (OpenAPI 3.1)
+│   └── insomnia.json          # Insomnia collection for manual testing (generated)
 ├── cmd/api/                   # Application entrypoint
 ├── internal/
 │   ├── device/                # Domain: entity, rules, service, repository interface
+│   │   └── devicetest/        # In-memory fake repository for service tests
 │   ├── storage/sqlite/        # SQLite repository + embedded migrations
 │   └── transport/http/        # gin handlers, routing, DTOs, error mapping
+├── scripts/insomnia.py        # Generator for api/insomnia.json
 ├── Dockerfile
 ├── docker-compose.yml
 └── Makefile
@@ -62,7 +69,7 @@ The `device` package holds the business rules and does not depend on HTTP or SQL
 
 ### Prerequisites
 
-- Go 1.27+ (for local development)
+- Go 1.27+ for local development. The code uses the standard library `uuid` package (Go 1.27) and the tests use `new(expr)` (Go 1.26). With an older Go (1.21+), the `go` command downloads the 1.27 toolchain automatically on first use, which needs network access. The Docker build needs no local Go at all.
 - Docker with Docker Compose (for the containerized run)
 - `make` (optional; every target is a thin wrapper around `go`/`docker` commands)
 
@@ -89,7 +96,7 @@ curl localhost:8080/health
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `8080` | HTTP port the server listens on |
-| `DB_PATH` | `/data/devices.db` in Docker | Path to the SQLite database file |
+| `DB_PATH` | `devices.db` locally, `/data/devices.db` in Docker | Path to the SQLite database file. Created on first start; migrations run automatically. |
 | `GIN_MODE` | `debug` locally, `release` in Docker | gin run mode |
 
 ## API documentation
@@ -107,13 +114,33 @@ Endpoint summary:
 |---|---|---|
 | `GET` | `/health` | Liveness check |
 | `POST` | `/devices` | Create a device |
-| `GET` | `/devices` | List devices (optional `?brand=` and `?state=` filters) |
+| `GET` | `/devices` | List devices (optional `?name=`, `?brand=` and `?state=` filters) |
 | `GET` | `/devices/{id}` | Fetch one device |
 | `PUT` | `/devices/{id}` | Fully update a device |
 | `PATCH` | `/devices/{id}` | Partially update a device |
 | `DELETE` | `/devices/{id}` | Delete a device |
 
 Domain-rule violations return `409 Conflict`; invalid input returns `400`; unknown ids return `404`.
+
+### Manual testing with Insomnia
+
+[`api/insomnia.json`](api/insomnia.json) has every endpoint and scenario (51 requests in 8 folders). Import it in Insomnia (*Import* → *From file*), start the API and run the folders in order:
+
+1. **01 Setup** creates three devices (available, in-use, inactive) and stores their ids in the environment.
+2. **02–06** cover create validation, fetch and filters, `PUT`, `PATCH` and delete. Each request description states the expected status.
+3. **07 Teardown** removes the devices Setup created.
+
+Each request has after-response tests (Insomnia 9+), so the collection runner reports pass/fail. Change `base_url` in the environment if the API is not on `localhost:8080`.
+
+The collection is generated from [`scripts/insomnia.py`](scripts/insomnia.py), which needs only Python 3. To add or change a scenario, edit the script, not the JSON:
+
+```bash
+make insomnia                                   # regenerate api/insomnia.json
+make insomnia-verify                            # run all scenarios against localhost:8080
+make insomnia-verify BASE_URL=http://host:port  # or another server
+```
+
+`insomnia-verify` creates devices and deletes them again, so run it against a local or throwaway database.
 
 ## Testing
 
@@ -123,11 +150,47 @@ make cover         # coverage summary
 make cover-html    # coverage report in the browser
 ```
 
+Coverage is measured across package boundaries (`-coverpkg`), so code exercised by another package's tests counts, for example `device.Restore` called from the SQLite tests. The `devicetest` test double and the `cmd/api` wiring are left out of the total.
+
+Tests are split into four layers:
+
+| Layer | Where | What it checks |
+|---|---|---|
+| Domain | `internal/device/device_test.go` | Entity rules: validation, state defaults, in-use restrictions |
+| Service | `internal/device/service_test.go` | Orchestration: what gets persisted, `not found` handling, empty `PATCH`. Uses the in-memory fake from `internal/device/devicetest` |
+| Repository | `internal/storage/sqlite/repository_test.go` | SQL against a real SQLite file in a temp dir: round trip, updates, `not found`, filters |
+| HTTP | `internal/transport/http/http_test.go` | The full stack through `httptest`: status codes, JSON shape, query params, error mapping |
+
+The fake repository ignores list filters on purpose. Filtering happens in SQL, so the repository tests cover it.
+
 ## Development workflow
 
 This project uses a strict test-first split:
 
 1. **A human writes the tests** (`*_test.go`, `testdata/`) to describe the expected behavior.
-2. **An AI coding agent writes the production code** to make those tests pass, iterating on `make test` output. It never modifies tests.
+2. **An AI coding agent writes the production code** to make those tests pass, iterating on `make test` output. It never modifies tests. Test doubles in `devicetest` count as production code: the agent maintains them, but never changes them to make a test pass.
 
 The rules for the agent are in [`CLAUDE.md`](CLAUDE.md). They are enforced by a Claude Code hook ([`.claude/hooks/protect-tests.py`](.claude/hooks/protect-tests.py)) that blocks any agent edit to test files.
+
+## Known limitations and future improvements
+
+### Known limitations
+
+- **Read-then-write race on update and delete.** The service loads the device, checks the domain rule in Go, then writes. Two concurrent requests can interleave: a `PATCH` that sets a device to `in-use` can land between the check and the `DELETE` of another request, so an in-use device may be deleted, or one update may overwrite another (lost update). Requests are fast and SQLite serializes writes, so the window is small, but it is not closed. Fix: wrap load, check and write in one transaction, or make the write conditional (`DELETE ... WHERE id = ? AND state <> 'in-use'`) and add a `version` column for optimistic locking on updates.
+- **No pagination.** `GET /devices` returns every matching row. Fine for small data sets, not for large ones.
+- **Name and brand filters do not use an index.** They are substring matches (`instr(lower(...))`), so every filtered list scans the whole table. Only `state` is indexed.
+- **Case-insensitive matching is ASCII-only.** SQLite's `lower()` does not fold non-ASCII letters, so `?brand=é` does not find `É`.
+- **Single writer.** SQLite allows one writer at a time and lives on one host, so the API cannot scale horizontally as is.
+- **No authentication or authorization.** Every client can read and change every device.
+- **Unstructured logs.** gin's access log plus `log.Printf`; no request IDs or JSON logs.
+
+### Future improvements
+
+- Close the race above with transactions or conditional writes, plus optimistic locking (`version` field and `If-Match`/ETag on `PUT`/`PATCH`).
+- Pagination (`limit` plus a cursor) and sorting on `GET /devices`.
+- PostgreSQL behind the same `device.Repository` interface for multi-instance deployments, with `pg_trgm` or `ILIKE` indexes for the substring filters. Only `internal/storage` and the wiring in `cmd/api` would change.
+- Structured logging with `log/slog`, request IDs, and Prometheus metrics.
+- Full `http.Server` timeouts (`ReadTimeout`, `WriteTimeout`, `IdleTimeout`; only `ReadHeaderTimeout` is set today) and a container health check.
+- CI (GitHub Actions) running `go vet`, `golangci-lint`, `make test` and `make cover`, and building the Docker image.
+- Serve the OpenAPI document and a Swagger UI from the API itself (for example `/docs`).
+- Authentication (API keys or OAuth2/JWT) once the API is exposed beyond a trusted network.

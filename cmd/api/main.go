@@ -11,23 +11,27 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/guilhermequitto/devices-crud/internal/device"
+	"github.com/guilhermequitto/devices-crud/internal/storage/sqlite"
+	httpapi "github.com/guilhermequitto/devices-crud/internal/transport/http"
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	port := envOr("PORT", "8080")
+	dbPath := envOr("DB_PATH", "devices.db")
 
-	router := gin.Default()
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
+	db, err := sqlite.Open(dbPath)
+	if err != nil {
+		log.Fatalf("database: %v", err)
+	}
+	defer db.Close()
+	log.Printf("database ready at %s", dbPath)
+
+	svc := device.NewService(sqlite.NewRepository(db))
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           router,
+		Handler:           httpapi.NewRouter(svc),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -48,4 +52,11 @@ func main() {
 		log.Printf("graceful shutdown failed: %v", err)
 	}
 	log.Println("server stopped")
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
