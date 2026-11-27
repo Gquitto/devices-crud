@@ -1,0 +1,1062 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_source": "devices-crud",
+  "resources": [
+    {
+      "_id": "wrk_devices_api",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "Devices API",
+      "description": "Manual test collection for the Devices API. Run the folders in order (01 Setup first, 07 Teardown last); Setup stores the device ids in the environment. Tests run as after-response scripts (Insomnia 9+).",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_devices_base",
+      "_type": "environment",
+      "parentId": "wrk_devices_api",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:8080",
+        "available_id": "",
+        "in_use_id": "",
+        "inactive_id": "",
+        "available_created": ""
+      }
+    },
+    {
+      "_id": "fld_00",
+      "_type": "request_group",
+      "parentId": "wrk_devices_api",
+      "name": "00 Health",
+      "metaSortKey": -1000
+    },
+    {
+      "_id": "req_00_00",
+      "_type": "request",
+      "parentId": "fld_00",
+      "name": "Health check",
+      "method": "GET",
+      "url": "{{ _.base_url }}/health",
+      "description": "Expected: 200",
+      "metaSortKey": -1000,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));"
+    },
+    {
+      "_id": "fld_01",
+      "_type": "request_group",
+      "parentId": "wrk_devices_api",
+      "name": "01 Setup - run first",
+      "metaSortKey": -999
+    },
+    {
+      "_id": "req_01_00",
+      "_type": "request",
+      "parentId": "fld_01",
+      "name": "Create available (state omitted, defaults to available)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 201",
+      "metaSortKey": -1000,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"TestDevice\",\n  \"brand\": \"TestBrand1\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 201\", () => insomnia.expect(insomnia.response.code).to.equal(201));\ninsomnia.test('Location points to the new device', () => insomnia.expect(insomnia.response.headers.get('Location')).to.equal('/devices/' + insomnia.response.json().id));\ninsomnia.test(\"state is available\", () => insomnia.expect(insomnia.response.json()[\"state\"]).to.equal(\"available\"));\ninsomnia.environment.set(\"available_id\", insomnia.response.json().id);\ninsomnia.environment.set('available_created', insomnia.response.json().creationTime);"
+    },
+    {
+      "_id": "req_01_01",
+      "_type": "request",
+      "parentId": "fld_01",
+      "name": "Create in-use",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 201",
+      "metaSortKey": -999,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"promax\",\n  \"brand\": \"TestBrand2\",\n  \"state\": \"in-use\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 201\", () => insomnia.expect(insomnia.response.code).to.equal(201));\ninsomnia.test(\"state is in-use\", () => insomnia.expect(insomnia.response.json()[\"state\"]).to.equal(\"in-use\"));\ninsomnia.environment.set(\"in_use_id\", insomnia.response.json().id);"
+    },
+    {
+      "_id": "req_01_02",
+      "_type": "request",
+      "parentId": "fld_01",
+      "name": "Create inactive",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 201",
+      "metaSortKey": -998,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"RogAllyX\",\n  \"brand\": \"TestBrand1\",\n  \"state\": \"inactive\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 201\", () => insomnia.expect(insomnia.response.code).to.equal(201));\ninsomnia.test(\"state is inactive\", () => insomnia.expect(insomnia.response.json()[\"state\"]).to.equal(\"inactive\"));\ninsomnia.environment.set(\"inactive_id\", insomnia.response.json().id);"
+    },
+    {
+      "_id": "fld_02",
+      "_type": "request_group",
+      "parentId": "wrk_devices_api",
+      "name": "02 Create - validation",
+      "metaSortKey": -998
+    },
+    {
+      "_id": "req_02_00",
+      "_type": "request",
+      "parentId": "fld_02",
+      "name": "Blank name",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 400",
+      "metaSortKey": -1000,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"\",\n  \"brand\": \"BrandTest\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_02_01",
+      "_type": "request",
+      "parentId": "fld_02",
+      "name": "Whitespace-only brand",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 400",
+      "metaSortKey": -999,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"DevTest\",\n  \"brand\": \" \"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_02_02",
+      "_type": "request",
+      "parentId": "fld_02",
+      "name": "Missing brand",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 400",
+      "metaSortKey": -998,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"DevTest\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_02_03",
+      "_type": "request",
+      "parentId": "fld_02",
+      "name": "Invalid state",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 400",
+      "metaSortKey": -997,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"DevTest\",\n  \"brand\": \"BrandTest\",\n  \"state\": \"broken\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_02_04",
+      "_type": "request",
+      "parentId": "fld_02",
+      "name": "Unknown field id",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 400",
+      "metaSortKey": -996,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"id\": \"x\",\n  \"name\": \"A\",\n  \"brand\": \"B\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_02_05",
+      "_type": "request",
+      "parentId": "fld_02",
+      "name": "Unknown field creationTime",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 400",
+      "metaSortKey": -995,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"A\",\n  \"brand\": \"B\",\n  \"creationTime\": \"2020-01-01T00:00:00Z\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_02_06",
+      "_type": "request",
+      "parentId": "fld_02",
+      "name": "Malformed JSON",
+      "method": "POST",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 400",
+      "metaSortKey": -994,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"name\":"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "fld_03",
+      "_type": "request_group",
+      "parentId": "wrk_devices_api",
+      "name": "03 Fetch",
+      "metaSortKey": -997
+    },
+    {
+      "_id": "req_03_00",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "Get one",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 200",
+      "metaSortKey": -1000,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"name is TestDevice\", () => insomnia.expect(insomnia.response.json()[\"name\"]).to.equal(\"TestDevice\"));"
+    },
+    {
+      "_id": "req_03_01",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "Get unknown id",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices/00000000-0000-4000-8000-000000000000",
+      "description": "Expected: 404",
+      "metaSortKey": -999,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 404\", () => insomnia.expect(insomnia.response.code).to.equal(404));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_03_02",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "Get invalid id",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices/not-a-uuid",
+      "description": "Expected: 400",
+      "metaSortKey": -998,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_03_03",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "List all",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices",
+      "description": "Expected: 200",
+      "metaSortKey": -997,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"includes available_id\", () => insomnia.expect(insomnia.response.json().some(d => d.id === insomnia.environment.get(\"available_id\"))).to.equal(true));\ninsomnia.test(\"includes in_use_id\", () => insomnia.expect(insomnia.response.json().some(d => d.id === insomnia.environment.get(\"in_use_id\"))).to.equal(true));\ninsomnia.test(\"includes inactive_id\", () => insomnia.expect(insomnia.response.json().some(d => d.id === insomnia.environment.get(\"inactive_id\"))).to.equal(true));"
+    },
+    {
+      "_id": "req_03_04",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "Filter by brand (partial, case-insensitive)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices?brand=brand1",
+      "description": "Expected: 200",
+      "metaSortKey": -996,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"includes available_id\", () => insomnia.expect(insomnia.response.json().some(d => d.id === insomnia.environment.get(\"available_id\"))).to.equal(true));\ninsomnia.test(\"includes inactive_id\", () => insomnia.expect(insomnia.response.json().some(d => d.id === insomnia.environment.get(\"inactive_id\"))).to.equal(true));\ninsomnia.test(\"every brand contains 'brand1'\", () => insomnia.expect(insomnia.response.json().every(d => d.brand.toLowerCase().includes('brand1'))).to.equal(true));"
+    },
+    {
+      "_id": "req_03_05",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "Filter by name (partial, case-insensitive)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices?name=PROMAX",
+      "description": "Expected: 200",
+      "metaSortKey": -995,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"includes in_use_id\", () => insomnia.expect(insomnia.response.json().some(d => d.id === insomnia.environment.get(\"in_use_id\"))).to.equal(true));\ninsomnia.test(\"every name contains 'promax'\", () => insomnia.expect(insomnia.response.json().every(d => d.name.toLowerCase().includes('promax'))).to.equal(true));"
+    },
+    {
+      "_id": "req_03_06",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "Filter by state",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices?state=in-use",
+      "description": "Expected: 200",
+      "metaSortKey": -994,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"includes in_use_id\", () => insomnia.expect(insomnia.response.json().some(d => d.id === insomnia.environment.get(\"in_use_id\"))).to.equal(true));\ninsomnia.test(\"every state is in-use\", () => insomnia.expect(insomnia.response.json().every(d => d.state === 'in-use')).to.equal(true));"
+    },
+    {
+      "_id": "req_03_07",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "Filters combined (AND)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices?brand=brand1&state=inactive",
+      "description": "Expected: 200",
+      "metaSortKey": -993,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"includes inactive_id\", () => insomnia.expect(insomnia.response.json().some(d => d.id === insomnia.environment.get(\"inactive_id\"))).to.equal(true));\ninsomnia.test(\"every device is inactive with a brand containing 'brand1'\", () => insomnia.expect(insomnia.response.json().every(d => d.brand.toLowerCase().includes('brand1') && d.state === 'inactive')).to.equal(true));"
+    },
+    {
+      "_id": "req_03_08",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "Filter with no match returns []",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices?brand=nokia",
+      "description": "Expected: 200",
+      "metaSortKey": -992,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test('body is []', () => insomnia.expect(insomnia.response.json()).to.eql([]));"
+    },
+    {
+      "_id": "req_03_09",
+      "_type": "request",
+      "parentId": "fld_03",
+      "name": "Invalid state filter",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices?state=broken",
+      "description": "Expected: 400",
+      "metaSortKey": -991,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "fld_04",
+      "_type": "request_group",
+      "parentId": "wrk_devices_api",
+      "name": "04 Full update (PUT)",
+      "metaSortKey": -996
+    },
+    {
+      "_id": "req_04_00",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "Update all fields",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.inactive_id }}",
+      "description": "Expected: 200",
+      "metaSortKey": -1000,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"DevTestUp\",\n  \"brand\": \"BrandTestUp\",\n  \"state\": \"available\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"name is DevTestUp\", () => insomnia.expect(insomnia.response.json()[\"name\"]).to.equal(\"DevTestUp\"));\ninsomnia.test(\"brand is BrandTestUp\", () => insomnia.expect(insomnia.response.json()[\"brand\"]).to.equal(\"BrandTestUp\"));\ninsomnia.test(\"state is available\", () => insomnia.expect(insomnia.response.json()[\"state\"]).to.equal(\"available\"));"
+    },
+    {
+      "_id": "req_04_01",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "Omitted state defaults to available",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.inactive_id }}",
+      "description": "Expected: 200",
+      "metaSortKey": -999,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"DevTestUp\",\n  \"brand\": \"BrandTestUp\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"state is available\", () => insomnia.expect(insomnia.response.json()[\"state\"]).to.equal(\"available\"));"
+    },
+    {
+      "_id": "req_04_02",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "creationTime is kept",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 200",
+      "metaSortKey": -998,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"TestDevice\",\n  \"brand\": \"TestBrand1\",\n  \"state\": \"available\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test('creationTime is unchanged', () => insomnia.expect(insomnia.response.json().creationTime).to.equal(insomnia.environment.get('available_created')));"
+    },
+    {
+      "_id": "req_04_03",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "In-use: same name and brand is allowed",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.in_use_id }}",
+      "description": "Expected: 200",
+      "metaSortKey": -997,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"promax\",\n  \"brand\": \"TestBrand2\",\n  \"state\": \"in-use\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));"
+    },
+    {
+      "_id": "req_04_04",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "In-use: rename is a conflict",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.in_use_id }}",
+      "description": "Expected: 409",
+      "metaSortKey": -996,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Other\",\n  \"brand\": \"TestBrand2\",\n  \"state\": \"in-use\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 409\", () => insomnia.expect(insomnia.response.code).to.equal(409));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_04_05",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "In-use: free and rename together is a conflict",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.in_use_id }}",
+      "description": "Expected: 409",
+      "metaSortKey": -995,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Other\",\n  \"brand\": \"TestBrand2\",\n  \"state\": \"available\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 409\", () => insomnia.expect(insomnia.response.code).to.equal(409));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_04_06",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "In-use: omitted state is rejected",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.in_use_id }}",
+      "description": "Expected: 400",
+      "metaSortKey": -994,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"promax\",\n  \"brand\": \"TestBrand2\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_04_07",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "Blank brand",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 400",
+      "metaSortKey": -993,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"TestDevice\",\n  \"brand\": \" \"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_04_08",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "Invalid state",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 400",
+      "metaSortKey": -992,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"TestDevice\",\n  \"brand\": \"TestBrand1\",\n  \"state\": \"broken\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_04_09",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "Unknown field creationTime",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 400",
+      "metaSortKey": -991,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"A\",\n  \"brand\": \"B\",\n  \"creationTime\": \"2020-01-01T00:00:00Z\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_04_10",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "Unknown id",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/00000000-0000-4000-8000-000000000000",
+      "description": "Expected: 404",
+      "metaSortKey": -990,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"A\",\n  \"brand\": \"B\",\n  \"state\": \"available\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 404\", () => insomnia.expect(insomnia.response.code).to.equal(404));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_04_11",
+      "_type": "request",
+      "parentId": "fld_04",
+      "name": "Invalid id",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/devices/not-a-uuid",
+      "description": "Expected: 400",
+      "metaSortKey": -989,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"A\",\n  \"brand\": \"B\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "fld_05",
+      "_type": "request_group",
+      "parentId": "wrk_devices_api",
+      "name": "05 Partial update (PATCH)",
+      "metaSortKey": -995
+    },
+    {
+      "_id": "req_05_00",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "Only name (brand and state kept)",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 200",
+      "metaSortKey": -1000,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"DevTestUp\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"name is DevTestUp\", () => insomnia.expect(insomnia.response.json()[\"name\"]).to.equal(\"DevTestUp\"));\ninsomnia.test(\"brand is TestBrand1\", () => insomnia.expect(insomnia.response.json()[\"brand\"]).to.equal(\"TestBrand1\"));\ninsomnia.test(\"state is available\", () => insomnia.expect(insomnia.response.json()[\"state\"]).to.equal(\"available\"));\ninsomnia.test('creationTime is unchanged', () => insomnia.expect(insomnia.response.json().creationTime).to.equal(insomnia.environment.get('available_created')));"
+    },
+    {
+      "_id": "req_05_01",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "Only state",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/{{ _.inactive_id }}",
+      "description": "Expected: 200",
+      "metaSortKey": -999,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"state\": \"inactive\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"name is DevTestUp\", () => insomnia.expect(insomnia.response.json()[\"name\"]).to.equal(\"DevTestUp\"));\ninsomnia.test(\"state is inactive\", () => insomnia.expect(insomnia.response.json()[\"state\"]).to.equal(\"inactive\"));"
+    },
+    {
+      "_id": "req_05_02",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "In-use: same name is allowed",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/{{ _.in_use_id }}",
+      "description": "Expected: 200",
+      "metaSortKey": -998,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"promax\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));"
+    },
+    {
+      "_id": "req_05_03",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "In-use: rename is a conflict",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/{{ _.in_use_id }}",
+      "description": "Expected: 409",
+      "metaSortKey": -997,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Other\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 409\", () => insomnia.expect(insomnia.response.code).to.equal(409));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_05_04",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "Empty body",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 400",
+      "metaSortKey": -996,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_05_05",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "Blank name",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 400",
+      "metaSortKey": -995,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_05_06",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "Invalid state",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 400",
+      "metaSortKey": -994,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"state\": \"broken\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_05_07",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "Unknown field id",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 400",
+      "metaSortKey": -993,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"id\": \"x\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_05_08",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "Unknown id",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/00000000-0000-4000-8000-000000000000",
+      "description": "Expected: 404",
+      "metaSortKey": -992,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"A\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 404\", () => insomnia.expect(insomnia.response.code).to.equal(404));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_05_09",
+      "_type": "request",
+      "parentId": "fld_05",
+      "name": "Invalid id",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/not-a-uuid",
+      "description": "Expected: 400",
+      "metaSortKey": -991,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"A\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "fld_06",
+      "_type": "request_group",
+      "parentId": "wrk_devices_api",
+      "name": "06 Delete",
+      "metaSortKey": -994
+    },
+    {
+      "_id": "req_06_00",
+      "_type": "request",
+      "parentId": "fld_06",
+      "name": "In-use is a conflict",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/devices/{{ _.in_use_id }}",
+      "description": "Expected: 409",
+      "metaSortKey": -1000,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 409\", () => insomnia.expect(insomnia.response.code).to.equal(409));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_06_01",
+      "_type": "request",
+      "parentId": "fld_06",
+      "name": "Delete available",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 204",
+      "metaSortKey": -999,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 204\", () => insomnia.expect(insomnia.response.code).to.equal(204));"
+    },
+    {
+      "_id": "req_06_02",
+      "_type": "request",
+      "parentId": "fld_06",
+      "name": "Get after delete is 404",
+      "method": "GET",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 404",
+      "metaSortKey": -998,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 404\", () => insomnia.expect(insomnia.response.code).to.equal(404));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_06_03",
+      "_type": "request",
+      "parentId": "fld_06",
+      "name": "Delete again is 404",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/devices/{{ _.available_id }}",
+      "description": "Expected: 404",
+      "metaSortKey": -997,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 404\", () => insomnia.expect(insomnia.response.code).to.equal(404));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "req_06_04",
+      "_type": "request",
+      "parentId": "fld_06",
+      "name": "Invalid id",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/devices/not-a-uuid",
+      "description": "Expected: 400",
+      "metaSortKey": -996,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 400\", () => insomnia.expect(insomnia.response.code).to.equal(400));\ninsomnia.test('body has an error message', () => insomnia.expect(insomnia.response.json().error).to.be.a('string'));"
+    },
+    {
+      "_id": "fld_07",
+      "_type": "request_group",
+      "parentId": "wrk_devices_api",
+      "name": "07 Teardown - run last",
+      "metaSortKey": -993
+    },
+    {
+      "_id": "req_07_00",
+      "_type": "request",
+      "parentId": "fld_07",
+      "name": "Free the in-use device",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/devices/{{ _.in_use_id }}",
+      "description": "Expected: 200",
+      "metaSortKey": -1000,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"state\": \"available\"\n}"
+      },
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 200\", () => insomnia.expect(insomnia.response.code).to.equal(200));\ninsomnia.test(\"state is available\", () => insomnia.expect(insomnia.response.json()[\"state\"]).to.equal(\"available\"));"
+    },
+    {
+      "_id": "req_07_01",
+      "_type": "request",
+      "parentId": "fld_07",
+      "name": "Delete the former in-use device",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/devices/{{ _.in_use_id }}",
+      "description": "Expected: 204",
+      "metaSortKey": -999,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 204\", () => insomnia.expect(insomnia.response.code).to.equal(204));"
+    },
+    {
+      "_id": "req_07_02",
+      "_type": "request",
+      "parentId": "fld_07",
+      "name": "Delete the inactive device",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/devices/{{ _.inactive_id }}",
+      "description": "Expected: 204",
+      "metaSortKey": -998,
+      "headers": [],
+      "body": {},
+      "parameters": [],
+      "afterResponseScript": "insomnia.test(\"status is 204\", () => insomnia.expect(insomnia.response.code).to.equal(204));"
+    }
+  ]
+}
