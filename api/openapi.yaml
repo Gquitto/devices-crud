@@ -5,7 +5,7 @@ info:
   description: |
     REST API to manage devices.
 
-    **Status: draft.** This contract was drafted from the project specification.
+    This contract matches the implementation and is checked by the HTTP tests.
     Tests are the source of truth; if they disagree with this file, update this file.
 
     Domain rules:

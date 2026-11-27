@@ -45,7 +45,7 @@ Rules:
 - List filters: `name` and `brand` are **case-insensitive partial** matches (`app` finds `Apple`); `state` is an exact match and an unknown value is `ErrInvalidState`. Filters combine with AND; no filter returns all devices.
 
 Domain API (`internal/device`):
-- Entity: `New(name, brand, state)`, `(*Device).Update(name, brand, state)`, `(*Device).Delete()` (checks the rule only; removal is the repository's job), `(*Device).CreationTime()`.
+- Entity: `New(name, brand, state)`, `(*Device).Update(name, brand, state)`, `(*Device).Delete()` (checks the rule only; removal is the repository's job), `(*Device).CreationTime()`. `Restore(id, name, brand, state, creationTime)` rebuilds a stored device, for repositories only (no validation).
 - Service: `NewService(repo)`, then `Create(ctx, name, brand, state)`, `Get(ctx, id)`, `Filter(ctx, name, brand, state)`, `Update(ctx, id, name, brand, state)`, `Patch(ctx, id, Patch)`, `Delete(ctx, id)`. `Patch` is a struct of pointers (`Name`, `Brand *string`; `State *State`): `nil` means omitted, a pointer to `""` is a blank value and fails validation. PUT and PATCH share one update path, so the rules live only in `Device.Update`.
 - Repository: `Repository` interface (`Create`, `Get`, `List(ctx, Filter)`, `Update`, `Delete`) and the `Filter` struct. Implementations return `ErrNotFound` for unknown ids and enforce no domain rules.
 - Errors: `ErrInvalidName`, `ErrInvalidBrand`, `ErrInvalidState`, `ErrInUseUpdate`, `ErrInUseDelete`, `ErrNotFound`, `ErrInvalidPatch`.
@@ -54,7 +54,8 @@ Domain API (`internal/device`):
 
 - `internal/device/device_test.go`: domain rules on the entity.
 - `internal/device/service_test.go`: orchestration (persist on success, nothing persisted on failure, `ErrNotFound`), using `devicetest.FakeRepo`. The fake ignores `Filter`, so filtering is not tested here.
-- HTTP end-to-end tests (`internal/transport/http`): `httptest` against a real SQLite file in `t.TempDir()`; they cover SQL, filters, status codes and JSON. Fixtures live in user-owned `testdata/`.
+- `internal/storage/sqlite/repository_test.go`: the SQLite repository directly, on a real file in `t.TempDir()`: round trip (exact `creationTime`), updates, `ErrNotFound`, and the filter semantics.
+- `internal/transport/http/http_test.go` (package `httpapi`): `httptest` against the full stack on a real SQLite file; covers status codes, JSON shape, `Location`, query-param wiring, `[]` for empty lists, and error → status mapping. Filter semantics are not re-tested here. Setup: `sqlite.Open(path)` (opens the DB and runs migrations, returns `*sql.DB`), `sqlite.NewRepository(db)`, `httpapi.NewRouter(svc)` (an `http.Handler`). Test data is created through the API (`POST /devices`), not SQL fixtures.
 
 The HTTP contract draft lives in [api/openapi.yaml](api/openapi.yaml). Tests take precedence over it. When production code changes the contract to satisfy tests, update the YAML too.
 
@@ -66,7 +67,7 @@ internal/device/          domain: entity, state, rules, errors, service, reposit
   devicetest/             test doubles (FakeRepo) for the user's service tests; agent-owned
 internal/storage/sqlite/  repository implementation on SQLite (modernc.org/sqlite, no CGO)
   migrations/             SQL migrations, embedded with go:embed
-internal/transport/http/  gin handlers, routing, DTOs, domain error → HTTP status mapping
+internal/transport/http/  package httpapi: gin handlers, routing, DTOs, domain error → HTTP status mapping
 api/openapi.yaml          API documentation
 ```
 
@@ -77,14 +78,17 @@ Dependency direction: `transport/http` → `device` ← `storage/sqlite`. The `d
 - **English only** for code, comments, docs, commit messages and error strings.
 - Go 1.27, stdlib first; gin for HTTP; `modernc.org/sqlite` for persistence. Add a dependency only when a test needs it.
 - Format with `gofmt`; keep `go vet ./...` clean.
-- Config through env vars: `PORT` (default `8080`), `DB_PATH` (SQLite file path).
+- Config through env vars: `PORT` (default `8080`), `DB_PATH` (SQLite file path, default `devices.db`).
+- Migrations are numbered files in `internal/storage/sqlite/migrations/` (`0002_....sql`, ...), applied in order by `sqlite.Open` and recorded in `schema_migrations`. Never edit an applied migration; add a new one.
+- `creation_time` is stored as RFC 3339 text with nanoseconds in UTC, so it reads back exactly.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
 | `make test` | All tests with `-race` |
-| `make cover` | Tests with coverage summary |
+| `make cover` | Tests with coverage summary (cross-package `-coverpkg`, excluding `devicetest`) |
+| `make insomnia` / `make insomnia-verify` | Regenerate `api/insomnia.json` from `scripts/insomnia.py` / run its scenarios against a live API (`BASE_URL`) |
 | `make vet` / `make fmt` | Static checks / formatting |
 | `make run` | Run the API locally |
 | `make up` / `make down` | Start / stop with Docker Compose |
